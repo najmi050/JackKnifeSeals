@@ -1,0 +1,155 @@
+---
+title: 'Task 3: JackKnife'
+output:
+  html_document:
+    df_print: paged
+---
+## Introduction
+JackKnife is a re-sampling technique used for removing bias and statistical errors inherently present in the samples. In the presence of an unbiased sample, produces the same estimate as the original sample. It is a non-parametric method, and therefore free from all assumptions which are associated with the parametric method. It is mainly used for to reduce bias and to estimate variance for estimators such as variance and mean. It is used when the sample's underlying distribution is not discernible, the sample size is small and can also be used just as an alternative to the traditional methods. It uses a Leave-One-Out strategy, for making a large number of sub-samples from an original sample, giving us n samples each with n-1 data points. It doesn't perform well with non-smooth statistics such as median and non-linear statistics such correlation co-coefficients[1][2]
+
+Although conceptually more complex, it is computationally less intensive than bootstrap, it produces estimates similar to bootstrap, except for the variance estimate, as it does not involve any randomness. To this end its estimates are always the same for a given original sample, unlike bootstrapping which gives different results each time its run.[3]
+
+## Analytical and JackKnife Estimate Comparison for the Seals data
+The Original sample's spread of data points can be seen by these two figures below (Figures 1 and 2). The Seal data set's box plot and histogram are indicative of a large variance. 
+
+```{r, echo=FALSE, fig.cap="Boxplot for body lengths of the originalseal's dataset.",fig.align='center', out.width = '50%'}
+
+knitr::include_graphics("/Users/najmi/Desktop/Semester 2/ID5059/Original Boxplot.png")
+
+```
+```{r, echo=FALSE, fig.cap="Histogram for body lengths of the original seal's dataset.",fig.align='center', out.width = '50%'}
+knitr::include_graphics("/Users/najmi/Desktop/Semester 2/ID5059/Original Histogram.png")
+```
+
+When we compare this to the JackKnife estimates of its replicates (Figures 3 and 4, box plot and histogram of means of its sub-samples) it shows that the variance in data has been reduced. This is because of the fact that by producing n replicates with n-1 samples each, JackKnife removes the bias in the variance estimate of the original data set. The original standard error of the mean lengths was 5.53, which is extremely large when compared to the JackKnife estimate, 0.55.
+
+```{r, echo=FALSE, fig.cap="Box plot for JackKnife estimate sample means .",fig.align='center', out.width = '50%'}
+knitr::include_graphics("/Users/najmi/Desktop/Semester 2/ID5059/Jackknife Boxplot.png")
+```
+```{r, echo=FALSE, fig.cap="Histogram for JackKnife estimated means for its 'n' samples or replicates.",fig.align='center', out.width = '50%'}
+knitr::include_graphics("/Users/najmi/Desktop/Semester 2/ID5059/Jackknife Histogram.png")
+```
+
+
+## References
+[1] NISBET, R., 2016. Handbook of statistical analysis and data mining applications. 2nd edition, Elsevier academic Press.
+
+[2]Unkown, 'The JackKnife Approach', [online] Available at: <http://www.hep.fsu.edu/~berg/teach/mcmc08/material/lecture05stat.pdf> [Accessed 3 November 2021].
+
+[3]Datasciencecentral.com. 2021. Resampling Methods: Bootstrap vs jackknife. [online] Available at: <https://www.datasciencecentral.com/profiles/blogs/resampling-methods-comparison> [Accessed 3 November 2021].
+
+## Appendix
+### SAS Code for the Task
+```{r, engine='sashtml'}
+knitr::opts_chunk$set(echo = TRUE)
+#/*Importing the seals dataset*/
+proc import out=seals
+DBMS=CSV replace
+file="/home/u59691081/New Folder/seals.csv";
+getnames=yes;
+datarow=2;
+run;
+#Analysing the spread of data points for our original data set. 
+
+#Using Histogram to visualize the spread. 
+proc univariate data=seals;
+histogram lengths/ ctext=black;
+run;
+
+#Using boxplot to visualize the spread. 
+proc sgplot data=seals;
+vbox lengths;
+run;
+
+#Calculating the true mean length of the dataset
+proc means Data=seals;
+var lengths;
+output out=truemeans mean=mean;
+run;
+#mean of the original data set is 110.71628445
+
+#'&size' will now contain the number of rows of the data set
+proc sql noprint;
+ select count(*) into :size from seals;
+ quit;
+#calculating the true standard deviation for the dataset
+proc means data=seals;
+var lengths;
+output out=truestd std=standarddeviation;
+run;
+#Standard deviation of the original sample is 5.5377124684"
+
+#assigning mean from the truemeans to &trueMean
+data _null_;
+set truemeans;
+call symput('trueMean',mean);
+run;
+#Creating a new column 'rec' having 1-100 row values 
+data test2 / view=test2;
+ set seals;
+ rec=_n_; 
+ run;
+
+#Creating 100 replicates each of 99 rows. Each 'replicate' has different set of 99 rows, using leave one out strategy. This will be our JackKnife Sample.
+proc sql noprint;
+ create table outb as
+ select a.rec as replicate, b.*
+ from test2 a, test2 b
+ where a.rec^=b.rec;
+ quit; 
+ 
+ ods listing close;
+#Calculating the JackKnife Sample mean for each replicate.
+ proc univariate data=outb;
+ var lengths;
+ by replicate;
+ output out=outall mean=mean;
+ run;
+ #Analysing the spread of data points for the JackKnifed collection of samples (JackKnife data set). 
+
+#Using Histogram to visualize the spread.
+ proc univariate data=outall;
+histogram mean/ ctext=black;
+run;
+#Using Boxplot to visualize the spread.
+proc sgplot data=outall;
+vbox mean;
+run;
+#Calculating the JackKnife Standard Error in 4 steps. 
+#1. 1st Step is calculation of the squared difference for each sample.
+data outall;
+set outall;
+by replicate;
+difference=(mean-&trueMean)**2;
+run;
+
+
+#2. Adding all the differences from all the Replicates.
+proc sql;
+create table work.differenceSum as
+select sum(difference) as sumOfDiff
+from work.outall;
+quit;
+#3. &diffSum is now assigned the Sum of differences of all samples. 
+proc print data=work.differenceSum;
+data differenceSum;
+set differenceSum;
+call symput('diffSum',sumofdiff);
+run;
+#4. Getting the number of sample size to multiply, to form the JackKnife StandardError equation.
+a. This will give us the number 99, the sample size for each individual replicate
+data have;
+do n=1 to &size-2;
+end;
+output;
+run;
+#b. Using the equation to calculate the JackKnife Standard Error
+data JstdError;
+set have;
+JStd_Error=sqrt((n-1)*(&diffSum)/n);
+drop n;
+run;
+#Standard Error of the Collection of JackKnife Samples is 0.5537429954
+```
+
+
